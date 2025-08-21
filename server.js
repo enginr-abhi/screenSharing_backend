@@ -1,46 +1,4 @@
-// const express = require("express");
-// const http = require("http");
-// const { Server } = require("socket.io");
-
-// const app = express();
-// const server = http.createServer(app);
-// const io = new Server(server);
-
-// app.use(express.static("public"));
-
-// io.on("connection", (socket) => {
-//   console.log("User connected:", socket.id);
-
-//   socket.on("join-room", (roomId) => {
-//     socket.join(roomId);
-//     socket.to(roomId).emit("user-joined", socket.id);
-//   });
-
-//   socket.on("request-screen", ({ roomId, from }) => {
-//     socket.to(roomId).emit("screen-request", { from });
-//   });
-
-//   socket.on("permission-response", ({ to, accepted }) => {
-//     io.to(to).emit("permission-result", accepted);
-//   });
-
-//   socket.on("offer", ({ roomId, offer }) => {
-//     socket.to(roomId).emit("offer", offer);
-//   });
-
-//   socket.on("answer", ({ roomId, answer }) => {
-//     socket.to(roomId).emit("answer", answer);
-//   });
-
-//   socket.on("ice-candidate", ({ roomId, candidate }) => {
-//     socket.to(roomId).emit("ice-candidate", candidate);
-//   });
-// });
-
-// server.listen(3000, () => {
-//   console.log("Server running on http://localhost:3000");
-// });
-
+// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -49,18 +7,16 @@ const PORT = process.env.PORT || 9000;
 
 const app = express();
 const server = http.createServer(app);
-// CORS (just for testing // later update with frontend url for production)
 app.use(cors());
 
-const io = new Server(server,{
-  cors:{origin:'*'},// later: frontend deploye url
-  methods:["GET","POST"]
+const io = new Server(server, {
+  cors: { origin: "*" },
+  methods: ["GET", "POST"]
 });
 
-// app.use(express.static(path.join(__dirname,'../frontend')));
-
-
 io.on("connection", (socket) => {
+  console.log('Connected:', socket.id);
+
   socket.on("join-room", (roomId) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     const count = room ? room.size : 0;
