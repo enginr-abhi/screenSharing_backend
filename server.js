@@ -7,7 +7,10 @@ const PORT = process.env.PORT || 9000;
 
 const app = express();
 const server = http.createServer(app);
-app.use(cors());
+app.use(cors({
+  origin: "https://screen-sharing-frontend.vercel.app", // Vercel frontend
+  methods: ["GET", "POST"]
+}));
 
 const io = new Server(server, {
   cors: { origin: "*" },
