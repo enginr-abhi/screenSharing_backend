@@ -16,6 +16,7 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log('Connected:', socket.id);
 
+  // Join room
   socket.on("join-room", (roomId) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     const count = room ? room.size : 0;
@@ -32,21 +33,21 @@ io.on("connection", (socket) => {
     io.to(to).emit("permission-result", accepted);
   });
 
-  // WebRTC signaling (desc + candidates)
+  // WebRTC signaling
   socket.on("signal", ({ roomId, desc, candidate }) => {
     if (desc) socket.to(roomId).emit("signal", { desc });
     if (candidate) socket.to(roomId).emit("signal", { candidate });
   });
 
+  // Stop sharing
   socket.on("stop-share", (roomId) => {
     socket.to(roomId).emit("remote-stopped");
   });
 
+  // Peer disconnect
   socket.on("disconnecting", () => {
     for (const roomId of socket.rooms) {
-      if (roomId !== socket.id) {
-        socket.to(roomId).emit("peer-left");
-      }
+      if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
     }
   });
 });
