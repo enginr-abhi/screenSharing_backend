@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+
 const PORT = process.env.PORT || 9000;
 
 const app = express();
@@ -9,12 +10,11 @@ const server = http.createServer(app);
 app.use(cors());
 
 const io = new Server(server, {
-  cors: { origin: "*" },
-  methods: ["GET", "POST"]
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
 io.on("connection", (socket) => {
-  console.log('Connected:', socket.id);
+  console.log("Connected:", socket.id);
 
   // Join room
   socket.on("join-room", (roomId) => {
@@ -25,7 +25,7 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("peer-joined");
   });
 
-  // Permission request/response
+  // Screen request / permission
   socket.on("request-screen", ({ roomId, from }) => {
     socket.to(roomId).emit("screen-request", { from });
   });
@@ -44,7 +44,7 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("remote-stopped");
   });
 
-  // Peer disconnect
+  // Disconnect
   socket.on("disconnecting", () => {
     for (const roomId of socket.rooms) {
       if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
@@ -52,6 +52,6 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
