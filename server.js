@@ -4,31 +4,36 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 
 const PORT = process.env.PORT || 9000;
-
 const app = express();
 const server = http.createServer(app);
 app.use(cors());
 
 const io = new Server(server, {
-  cors: { origin: "https://screen-sharing-frontend.vercel.app", methods: ["GET", "POST"] },
+  cors: { origin: "*", methods: ["GET","POST"] },
 });
+
+const peers = {}; // store socket.id => name
 
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
   // Join room
-  socket.on("join-room", (roomId) => {
+  socket.on("join-room", ({ roomId, name }) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     const count = room ? room.size : 0;
     if (count >= 2) return socket.emit("room-full");
+    
     socket.join(roomId);
+    peers[socket.id] = name;
     socket.to(roomId).emit("peer-joined");
   });
 
   // Screen request / permission
   socket.on("request-screen", ({ roomId, from }) => {
-    socket.to(roomId).emit("screen-request", { from });
+    const name = peers[from] || "Unknown";
+    socket.to(roomId).emit("screen-request", { from, name });
   });
+
   socket.on("permission-response", ({ to, accepted }) => {
     io.to(to).emit("permission-result", accepted);
   });
@@ -46,11 +51,13 @@ io.on("connection", (socket) => {
 
   // Disconnect
   socket.on("disconnecting", () => {
+    delete peers[socket.id];
     for (const roomId of socket.rooms) {
       if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
     }
   });
 });
+
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
