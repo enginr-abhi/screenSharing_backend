@@ -9,7 +9,7 @@ const server = http.createServer(app);
 app.use(cors());
 
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET","POST"] },
+  cors: { origin: "https://screen-sharing-frontend.vercel.app/", methods: ["GET","POST"] },
 });
 
 const peers = {}; // store socket.id => name
