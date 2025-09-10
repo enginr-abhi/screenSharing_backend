@@ -12,57 +12,111 @@ app.get("/", (req, res) => {
   res.send("Backend is LIVE ✅, version: 2");
 });
 
+
 const io = new Server(server, {
-  cors: { origin: "https://screen-sharing-frontend.vercel.app/", methods: ["GET","POST"] },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-const peers = {}; // store socket.id => name
+// socket.id => { name, role }
+const peers = {};
 
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
-  // Join room
-  socket.on("join-room", ({ roomId, name }) => {
+  // --- Join room
+  socket.on("join-room", ({ roomId, name, role }) => {
     const room = io.sockets.adapter.rooms.get(roomId);
-    const count = room ? room.size : 0;
-    if (count >= 2) return socket.emit("room-full");
-    
+    const members = room ? [...room] : [];
+
+    // ✅ Only 1 sharer allowed
+    if (role === "sharer") {
+      const sharerExists = members.some(id => peers[id]?.role === "sharer");
+      if (sharerExists) {
+        return socket.emit("room-full", "Sharer already exists in this room.");
+      }
+    }
+
     socket.join(roomId);
-    peers[socket.id] = name;
-    socket.to(roomId).emit("peer-joined");
+    peers[socket.id] = { name, role: role || "viewer" };
+
+    // Notify others (but not agent)
+    if (role !== "agent") {
+      socket.to(roomId).emit("peer-joined", { id: socket.id, name, role });
+    }
+
+    console.log(`🔗 ${name} (${role || "viewer"}) joined room ${roomId}`);
   });
 
-  // Screen request / permission
+  // --- Screen request
   socket.on("request-screen", ({ roomId, from }) => {
-    const name = peers[from] || "Unknown";
-    socket.to(roomId).emit("screen-request", { from, name });
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return;
+
+    for (const id of room) {
+      if (id !== from && peers[id]?.role === "sharer") {
+        const name = peers[from]?.name || "Unknown";
+        io.to(id).emit("screen-request", { from, name });
+      }
+    }
   });
 
   socket.on("permission-response", ({ to, accepted }) => {
     io.to(to).emit("permission-result", accepted);
   });
 
-  // WebRTC signaling
+  // --- WebRTC signaling
   socket.on("signal", ({ roomId, desc, candidate }) => {
-    if (desc) socket.to(roomId).emit("signal", { desc });
-    if (candidate) socket.to(roomId).emit("signal", { candidate });
-  });
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return;
 
-  // Stop sharing
-  socket.on("stop-share", (roomId) => {
-    socket.to(roomId).emit("remote-stopped");
-  });
-
-  // Disconnect
-  socket.on("disconnecting", () => {
-    delete peers[socket.id];
-    for (const roomId of socket.rooms) {
-      if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
+    for (const id of room) {
+      if (id !== socket.id) {
+        if (desc) io.to(id).emit("signal", { desc });
+        if (candidate) io.to(id).emit("signal", { candidate });
+      }
     }
+  });
+
+  // --- 🔹 Remote control events
+  socket.on("control-event", ({ roomId, event }) => {
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return;
+
+    // Forward to all except sender
+    for (const id of room) {
+      if (id !== socket.id) {
+        io.to(id).emit("control-event", { event });
+      }
+    }
+
+    // Also forward as system-control for agents
+    io.to(roomId).emit("system-control", event);
+  });
+
+  // --- Stop sharing
+  socket.on("stop-share", (roomId) => {
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return;
+
+    for (const id of room) {
+      if (id !== socket.id) io.to(id).emit("remote-stopped");
+    }
+  });
+
+  // --- Disconnect
+  socket.on("disconnecting", () => {
+    const peerInfo = peers[socket.id];
+    delete peers[socket.id];
+
+    for (const roomId of socket.rooms) {
+      if (roomId !== socket.id && peerInfo?.role !== "agent") {
+        socket.to(roomId).emit("peer-left", { id: socket.id });
+      }
+    }
+    console.log(`❌ Disconnected: ${socket.id}`);
   });
 });
 
-
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`✅ Server running on http://0.0.0.0:${PORT}`);
 });
