@@ -8,6 +8,10 @@ const app = express();
 const server = http.createServer(app);
 app.use(cors());
 
+app.get("/", (req, res) => {
+  res.send("Backend is LIVE ✅, version: 2");
+});
+
 const io = new Server(server, {
   cors: { origin: "https://screen-sharing-frontend.vercel.app/", methods: ["GET","POST"] },
 });
