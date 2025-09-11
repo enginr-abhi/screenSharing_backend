@@ -18,14 +18,19 @@ const io = new Server(server, {
 
 const peers = {}; // store socket.id => name
 
+// --- Helper: broadcast all users ---
+function broadcastUsers() {
+  io.emit("users-update", Object.values(peers));
+}
+
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
-  // === NEW: send updated user list ===
-  const broadcastUsers = () => {
-    const users = Object.values(peers);
-    io.emit("users-update", users);
-  };
+  // ✅ Set name (called from frontend after entering name)
+  socket.on("set-name", (name) => {
+    peers[socket.id] = name || "Unknown";
+    broadcastUsers();
+  });
 
   // Join room
   socket.on("join-room", ({ roomId, name }) => {
@@ -35,8 +40,9 @@ io.on("connection", (socket) => {
     
     socket.join(roomId);
     peers[socket.id] = name;
-    socket.to(roomId).emit("peer-joined",{name});
-    broadcastUsers();// brodcast updated list
+    socket.to(roomId).emit("peer-joined");
+
+    broadcastUsers(); // ✅ update list
   });
 
   // Screen request / permission
@@ -66,10 +72,12 @@ io.on("connection", (socket) => {
     for (const roomId of socket.rooms) {
       if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
     }
-    broadcastUsers(); // 🔥 update after leaving
+  });
+
+  socket.on("disconnect", () => {
+    broadcastUsers(); // ✅ update list when user leaves
   });
 });
-
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
