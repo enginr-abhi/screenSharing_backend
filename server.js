@@ -9,7 +9,7 @@ const server = http.createServer(app);
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("Backend is LIVE ✅, version: 2");
+  res.send("Backend is LIVE ✅, version: 3");
 });
 
 const io = new Server(server, {
@@ -21,6 +21,12 @@ const peers = {}; // store socket.id => name
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
+  // === NEW: send updated user list ===
+  const broadcastUsers = () => {
+    const users = Object.values(peers);
+    io.emit("users-update", users);
+  };
+
   // Join room
   socket.on("join-room", ({ roomId, name }) => {
     const room = io.sockets.adapter.rooms.get(roomId);
@@ -29,7 +35,8 @@ io.on("connection", (socket) => {
     
     socket.join(roomId);
     peers[socket.id] = name;
-    socket.to(roomId).emit("peer-joined");
+    socket.to(roomId).emit("peer-joined",{name});
+    broadcastUsers();// brodcast updated list
   });
 
   // Screen request / permission
@@ -59,6 +66,7 @@ io.on("connection", (socket) => {
     for (const roomId of socket.rooms) {
       if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
     }
+    broadcastUsers(); // 🔥 update after leaving
   });
 });
 
