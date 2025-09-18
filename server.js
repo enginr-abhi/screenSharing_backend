@@ -1,88 +1,82 @@
+// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const cors = require("cors");
 
-const PORT = process.env.PORT || 9000;
 const app = express();
 const server = http.createServer(app);
-app.use(cors());
+const io = new Server(server, { cors: { origin: "*" } });
 
+const peers = {}; // socketId -> { name, roomId, isAgent, isSharing, captureInfo? }
 
-app.get("/", (req, res) => {
-  res.send("Backend is LIVE ✅, version: 4 (Agent + ScreenShare)");
-});
+io.on("connection", socket => {
+  console.log("🔌 Connected:", socket.id);
 
-// --- Socket.IO setup
-const io = new Server(server, {
-  cors: { origin: "https://screen-sharing-frontend.vercel.app/", methods: ["GET","POST"] },
-});
-
-const peers = {};      // socket.id => name
-
-// --- Helper: broadcast all users
-function broadcastUsers() {
-  io.emit("users-update", Object.values(peers));
-}
-
-// --- Socket.IO events
-io.on("connection", (socket) => {
-  console.log("Connected:", socket.id);
-
-  // Set name (browser user)
-  socket.on("set-name", (name) => {
-    peers[socket.id] = name || "Unknown";
-    broadcastUsers();
+  socket.on("set-name", ({ name }) => {
+    peers[socket.id] = { ...peers[socket.id], name };
   });
 
-  // Join room (screen share)
-  socket.on("join-room", ({ roomId, name }) => {
-    const room = io.sockets.adapter.rooms.get(roomId);
-    const count = room ? room.size : 0;
-    if (count >= 2) return socket.emit("room-full");
-
+  socket.on("join-room", ({ roomId, isAgent = false }) => {
+    peers[socket.id] = { ...peers[socket.id], roomId, isAgent, isSharing: false };
     socket.join(roomId);
-    peers[socket.id] = name;
-    socket.to(roomId).emit("peer-joined");
-    broadcastUsers();
-  });
+    console.log(`👥 ${socket.id} joined room ${roomId} (isAgent=${isAgent})`);
 
-  // Screen request / permission
-  socket.on("request-screen", ({ roomId, from }) => {
-    const name = peers[from] || "Unknown";
-    socket.to(roomId).emit("screen-request", { from, name });
-  });
-
-  socket.on("permission-response", ({ to, accepted }) => {
-    io.to(to).emit("permission-result", accepted);
-  });
-
-  // WebRTC signaling + command forwarding
-  socket.on("signal", ({ roomId, desc, candidate, command }) => {
-    if (desc) socket.to(roomId).emit("signal", { desc });
-    if (candidate) socket.to(roomId).emit("signal", { candidate });
-    if (command) socket.to(roomId).emit("signal", { command });
-  });
-
-  // Stop sharing
-  socket.on("stop-share", (roomId) => {
-    socket.to(roomId).emit("remote-stopped");
-  });
-
-  // Disconnect / cleanup
-  socket.on("disconnecting", () => {
-    delete peers[socket.id];
-    for (const roomId of socket.rooms) {
-      if (roomId !== socket.id) socket.to(roomId).emit("peer-left");
-    }
+    socket.to(roomId).emit("peer-joined", {
+      id: socket.id,
+      name: peers[socket.id].name,
+      isAgent
+    });
   });
 
   socket.on("disconnect", () => {
-    broadcastUsers();
+    const { roomId, isSharing } = peers[socket.id] || {};
+    if (roomId) {
+      socket.to(roomId).emit("peer-left", { id: socket.id });
+      if (isSharing) socket.to(roomId).emit("stop-share");
+    }
+    delete peers[socket.id];
+  });
+
+  // ---- Screen request & permission ----
+  socket.on("request-screen", ({ roomId, from }) => {
+    socket.to(roomId).emit("screen-request", { from, name: peers[socket.id]?.name });
+  });
+
+  socket.on("permission-response", ({ to, accepted }) => {
+    if (accepted && peers[socket.id]) peers[socket.id].isSharing = true;
+    io.to(to).emit("permission-result", accepted);
+  });
+
+  socket.on("stop-share", roomId => {
+    if (peers[socket.id]) peers[socket.id].isSharing = false;
+    socket.to(roomId).emit("stop-share");
+  });
+
+  // ---- WebRTC signaling ----
+  socket.on("signal", ({ roomId, desc, candidate }) => {
+    socket.to(roomId).emit("signal", { desc, candidate });
+  });
+
+  // ---- Capture info ----
+  socket.on("capture-info", info => {
+    peers[socket.id] = { ...peers[socket.id], captureInfo: info, roomId: info.roomId };
+    for (const [id, p] of Object.entries(peers)) {
+      if (p.roomId === info.roomId && p.isAgent) {
+        io.to(id).emit("capture-info", info);
+      }
+    }
+  });
+
+  // ---- Remote control ----
+  socket.on("control", data => {
+    const { roomId } = peers[socket.id] || {};
+    if (!roomId) return;
+    for (const [id, p] of Object.entries(peers)) {
+      if (p.roomId === roomId && p.isAgent) {
+        io.to(id).emit("control", data);
+      }
+    }
   });
 });
 
-// --- Start server
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
-});
+server.listen(9000, () => console.log("🚀 Server running on http://localhost:9000"));
