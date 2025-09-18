@@ -2,10 +2,17 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-
+const cors = require("cors");
 const app = express();
+const PORT = process.env.PORT || 9000;
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+app.use(cors());
+
+app.get("/", (req, res) => {
+  res.send("Backend is LIVE ✅, version: 4.1 (Agent + ScreenShare)");
+});
+
+const io = new Server(server, { cors: { origin: "https://screen-sharing-frontend.vercel.app/" , methods: ["GET","POST"]} });
 
 const peers = {}; // socketId -> { name, roomId, isAgent, isSharing, captureInfo? }
 
@@ -79,4 +86,8 @@ io.on("connection", socket => {
   });
 });
 
-server.listen(9000, () => console.log("🚀 Server running on http://localhost:9000"));
+
+// --- Start server
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
+});
