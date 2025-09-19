@@ -1,38 +1,33 @@
-// server.js
+//server.js //
+const http = require('http');
 const express = require("express");
-const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const app = express();
 const PORT = process.env.PORT || 9000;
+const app = express();
 const server = http.createServer(app);
+const path = require("path");
 app.use(cors());
-
 app.get("/", (req, res) => {
-  res.send("Backend is LIVE ✅, version: 4.1 (Agent + ScreenShare)");
+  res.send("Backend is LIVE ✅, version: 2");
+});
+app.get("/download-agent", (req, res) => {
+  res.download(path.join(__dirname, "../remote-agent/agent.exe"));
 });
 
-const io = new Server(server, { cors: { origin: "https://screen-sharing-frontend.vercel.app/" , methods: ["GET","POST"]} });
+const io = new Server(server, { cors: { origin: "https://screen-sharing-frontend.vercel.app/" , methods: ["GET","POST"] } });
 
 const peers = {}; // socketId -> { name, roomId, isAgent, isSharing, captureInfo? }
 
 io.on("connection", socket => {
-  console.log("🔌 Connected:", socket.id);
+  console.log("Connected:", socket.id);
 
-  socket.on("set-name", ({ name }) => {
-    peers[socket.id] = { ...peers[socket.id], name };
-  });
+  socket.on("set-name", ({ name }) => { peers[socket.id] = { ...peers[socket.id], name }; });
 
   socket.on("join-room", ({ roomId, isAgent = false }) => {
     peers[socket.id] = { ...peers[socket.id], roomId, isAgent, isSharing: false };
     socket.join(roomId);
-    console.log(`👥 ${socket.id} joined room ${roomId} (isAgent=${isAgent})`);
-
-    socket.to(roomId).emit("peer-joined", {
-      id: socket.id,
-      name: peers[socket.id].name,
-      isAgent
-    });
+    socket.to(roomId).emit("peer-joined", { id: socket.id, name: peers[socket.id].name, isAgent });
   });
 
   socket.on("disconnect", () => {
@@ -64,30 +59,25 @@ io.on("connection", socket => {
     socket.to(roomId).emit("signal", { desc, candidate });
   });
 
-  // ---- Capture info ----
+  // ---- Capture info (resolution & scaling) ----
   socket.on("capture-info", info => {
     peers[socket.id] = { ...peers[socket.id], captureInfo: info, roomId: info.roomId };
     for (const [id, p] of Object.entries(peers)) {
-      if (p.roomId === info.roomId && p.isAgent) {
-        io.to(id).emit("capture-info", info);
-      }
+      if (p.roomId === info.roomId && p.isAgent) io.to(id).emit("capture-info", info);
     }
   });
 
-  // ---- Remote control ----
+  // ---- Remote control events ----
   socket.on("control", data => {
     const { roomId } = peers[socket.id] || {};
     if (!roomId) return;
     for (const [id, p] of Object.entries(peers)) {
-      if (p.roomId === roomId && p.isAgent) {
-        io.to(id).emit("control", data);
-      }
+      if (p.roomId === roomId && p.isAgent) io.to(id).emit("control", data);
     }
   });
 });
 
 
-// --- Start server
-server.listen(PORT, "0.0.0.0", () => {
+server.listen(PORT, '0.0.0.0',() => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
