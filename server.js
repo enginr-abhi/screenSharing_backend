@@ -6,14 +6,22 @@ const cors = require("cors");
 const PORT = process.env.PORT || 9000;
 const app = express();
 const server = http.createServer(app);
-const path = require("path");
 app.use(cors());
 app.get("/", (req, res) => {
   res.send("Backend is LIVE ✅, version: 2");
 });
+const path = require("path");
+
 app.get("/download-agent", (req, res) => {
-  res.download(path.join(__dirname, "../remote-agent/agent.exe"));
+  const filePath = path.join(__dirname, "agent", "agent.exe");
+  res.download(filePath, "remote-agent.exe", (err) => {
+    if (err) {
+      console.error("Download error:", err);
+      res.status(500).send("File not found");
+    }
+  });
 });
+
 
 const io = new Server(server, { cors: { origin: "https://screen-sharing-frontend.vercel.app/" , methods: ["GET","POST"] } });
 
