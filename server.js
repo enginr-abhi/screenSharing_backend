@@ -4,13 +4,14 @@ const express = require("express");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const PORT = process.env.PORT || 9000;
+const path = require('path');
 const app = express();
 const server = http.createServer(app);
 app.use(cors());
 app.get("/", (req, res) => {
   res.send("Backend is LIVE ✅, version: 2");
 });
-const path = require("path");
+
 
 app.get("/download-agent", (req, res) => {
   const filePath = path.join(__dirname, "agent", "agent.exe");
