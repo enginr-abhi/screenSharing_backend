@@ -24,7 +24,7 @@ app.get("/download-agent", (req, res) => {
 });
 
 
-const io = new Server(server, { cors: { origin: "https://screen-sharing-frontend.vercel.app/" , methods: ["GET","POST"] } });
+const io = new Server(server, { cors: { origin: "*" , methods: ["GET","POST"] } });
 
 const peers = {}; // socketId -> { name, roomId, isAgent, isSharing, captureInfo? }
 
