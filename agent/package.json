@@ -2,7 +2,6 @@
   "name": "remote-agent",
   "version": "1.0.0",
   "description": "",
-  "main": "agent.js",
   "bin": "agent.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,7 +10,7 @@
   },
   "pkg": {
     "assets": [
-      "node_modules/@nut-tree-fork/libnut.node-win32/build/Release/libnut.node"
+      "node_modules/@nut-tree-fork/libnut-win32/lib/binding/**/*"
     ]
   },
   "keywords": [],

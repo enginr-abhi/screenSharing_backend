@@ -2,8 +2,35 @@
 const os = require("os");
 const process = require("process");
 const { io } = require("socket.io-client");
-const { mouse, keyboard, Key, Point, Button, screen } = require("@nut-tree-fork/nut-js");
 const { execSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+
+// ---- Load nut.js native binding (works in dev + exe) ----
+let libnutPath;
+const possiblePaths = [
+  // Dev mode: running directly with node
+  path.join(__dirname, "node_modules/@nut-tree-fork/libnut-win32/lib/binding/node-v108-win32-x64/libnut.node"),
+  // Packaged exe mode: file copied next to exe
+  path.join(path.dirname(process.execPath), "libnut.node")
+];
+
+for (const p of possiblePaths) {
+  if (fs.existsSync(p)) {
+    libnutPath = p;
+    break;
+  }
+}
+
+if (!libnutPath) {
+  throw new Error("❌ libnut.node not found – make sure it’s in node_modules (dev) or next to exe (prod)");
+}
+
+// preload libnut so nut-js works
+require(libnutPath);
+
+// Now import nut-js
+const { mouse, keyboard, Key, Point, Button, screen } = require("@nut-tree-fork/nut-js");
 
 // ---- Global error handlers ----
 process.on("uncaughtException", err => {
