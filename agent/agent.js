@@ -5,6 +5,19 @@ const { io } = require("socket.io-client");
 const { mouse, keyboard, Key, Point, Button, screen } = require("@nut-tree-fork/nut-js");
 const { execSync } = require("child_process");
 
+// ---- Global error handlers ----
+process.on("uncaughtException", err => {
+  console.error("❌ Uncaught Error:", err);
+  console.error("The agent will exit in 10 seconds...");
+  setTimeout(() => process.exit(1), 10000);
+});
+
+process.on("unhandledRejection", err => {
+  console.error("❌ Unhandled Promise Rejection:", err);
+  console.error("The agent will exit in 10 seconds...");
+  setTimeout(() => process.exit(1), 10000);
+});
+
 // ---- Permission check ----
 function checkPermissions() {
   const platform = os.platform();
@@ -36,19 +49,25 @@ const socket = io("https://screensharing-test-backend.onrender.com", {
 
 let captureInfo = null, lastMoveTs = 0;
 const MOVE_THROTTLE_MS = 15;
+
+// ---- Room join logic (intact) ----
 const ROOM = process.env.ROOM || process.argv[2] || "room1";
+
 // ---- On connect, join as Agent ----
 socket.on("connect", () => {
-  console.log("✅ Agent connected:", socket.id,"Room:", ROOM);
- 
-  // 👇 IMPORTANT FIX: join room as agent
-  socket.emit("join-room", { roomId: ROOM, isAgent: true });
+  console.log("✅ Agent connected:", socket.id, "Room:", ROOM);
+  try {
+    socket.emit("join-room", { roomId: ROOM, isAgent: true });
+    console.log("✅ Joined room successfully");
+  } catch (err) {
+    console.error("❌ Failed to join room:", err);
+  }
 });
 
 socket.on("disconnect", () => console.log("❌ Agent disconnected"));
 socket.on("capture-info", info => {
   captureInfo = info;
-  console.log("📐 Capture info:", info);
+  console.log("📐 Capture info received:", info);
 });
 socket.on("stop-share", () => {
   captureInfo = null;
@@ -84,10 +103,12 @@ socket.on("control", async data => {
       const h = (captureInfo.captureHeight || 720) * (captureInfo.devicePixelRatio || 1);
       const srcX = typeof data.x === "number" ? Math.round(data.x * w) : null;
       const srcY = typeof data.y === "number" ? Math.round(data.y * h) : null;
+
       const displayWidth = await screen.width();
       const displayHeight = await screen.height();
       const absX = srcX !== null ? clamp(Math.round(srcX * (displayWidth / Math.max(1, w))), 0, displayWidth - 1) : null;
       const absY = srcY !== null ? clamp(Math.round(srcY * (displayHeight / Math.max(1, h))), 0, displayHeight - 1) : null;
+
       if (absX !== null && absY !== null) await mouse.setPosition(new Point(absX, absY));
 
       if (data.type === "click") await mouse.click(mapBtn(data.button));
@@ -99,10 +120,12 @@ socket.on("control", async data => {
         else await mouse.scrollUp(200);
       }
     }
+
     if (["keydown", "keyup"].includes(data.type)) {
       const rawKey = (data.key || "").toString();
       const keyName = rawKey.toLowerCase();
       const mapped = keyMap[keyName];
+
       if (data.type === "keydown") {
         if (mapped) await keyboard.pressKey(mapped);
         else if (isPrintableChar(rawKey)) await keyboard.type(rawKey);
@@ -114,8 +137,9 @@ socket.on("control", async data => {
     console.error("⚠️ Error handling control:", err);
   }
 });
+
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 // ---- Keep agent alive ----
-process.stdin.resume();  // keeps Node process running
+process.stdin.resume();
 console.log("🟢 Agent is now alive and waiting for remote control events...");
