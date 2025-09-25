@@ -8,13 +8,10 @@ const { execSync } = require("child_process");
 // ---- Global error handlers ----
 process.on("uncaughtException", err => {
   console.error("❌ Uncaught Error:", err);
-  console.error("The agent will exit in 10 seconds...");
   setTimeout(() => process.exit(1), 10000);
 });
-
 process.on("unhandledRejection", err => {
   console.error("❌ Unhandled Promise Rejection:", err);
-  console.error("The agent will exit in 10 seconds...");
   setTimeout(() => process.exit(1), 10000);
 });
 
@@ -50,10 +47,10 @@ const socket = io("https://screensharing-test-backend.onrender.com", {
 let captureInfo = null, lastMoveTs = 0;
 const MOVE_THROTTLE_MS = 15;
 
-// ---- Room join logic (intact) ----
+// ---- Room join logic ----
 const ROOM = process.env.ROOM || process.argv[2] || "room1";
 
-// ---- On connect, join as Agent ----
+// ---- On connect ----
 socket.on("connect", () => {
   console.log("✅ Agent connected:", socket.id, "Room:", ROOM);
   try {
@@ -94,7 +91,7 @@ const mapBtn = btn => btn === 2 ? Button.RIGHT : (btn === 1 ? Button.MIDDLE : Bu
 socket.on("control", async data => {
   if (!captureInfo) return;
   try {
-    if (["mousemove", "click", "mousedown", "mouseup", "dblclick", "wheel"].includes(data.type)) {
+    if (["mousemove","click","mousedown","mouseup","dblclick","wheel"].includes(data.type)) {
       const now = Date.now();
       if (data.type === "mousemove" && now - lastMoveTs < MOVE_THROTTLE_MS) return;
       lastMoveTs = now;
@@ -106,11 +103,10 @@ socket.on("control", async data => {
 
       const displayWidth = await screen.width();
       const displayHeight = await screen.height();
-      const absX = srcX !== null ? clamp(Math.round(srcX * (displayWidth / Math.max(1, w))), 0, displayWidth - 1) : null;
-      const absY = srcY !== null ? clamp(Math.round(srcY * (displayHeight / Math.max(1, h))), 0, displayHeight - 1) : null;
+      const absX = srcX !== null ? clamp(Math.round(srcX * (displayWidth / Math.max(1,w))), 0, displayWidth-1) : null;
+      const absY = srcY !== null ? clamp(Math.round(srcY * (displayHeight / Math.max(1,h))), 0, displayHeight-1) : null;
 
       if (absX !== null && absY !== null) await mouse.setPosition(new Point(absX, absY));
-
       if (data.type === "click") await mouse.click(mapBtn(data.button));
       else if (data.type === "dblclick") await mouse.doubleClick(mapBtn(data.button));
       else if (data.type === "mousedown") await mouse.pressButton(mapBtn(data.button));
@@ -121,7 +117,7 @@ socket.on("control", async data => {
       }
     }
 
-    if (["keydown", "keyup"].includes(data.type)) {
+    if (["keydown","keyup"].includes(data.type)) {
       const rawKey = (data.key || "").toString();
       const keyName = rawKey.toLowerCase();
       const mapped = keyMap[keyName];
@@ -138,7 +134,7 @@ socket.on("control", async data => {
   }
 });
 
-function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
 
 // ---- Keep agent alive ----
 process.stdin.resume();

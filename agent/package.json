@@ -1,9 +1,11 @@
 {
   "name": "remote-agent",
   "version": "1.0.0",
+  "description": "",
   "main": "agent.js",
   "bin": "agent.js",
   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "pkg agent.js --targets node18-win-x64 --output agent.exe",
     "start": "node agent.js"
   },
@@ -12,10 +14,13 @@
       "node_modules/@nut-tree-fork/libnut.node-win32/build/Release/libnut.node"
     ]
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
     "screenshot-desktop": "^1.15.2",
     "socket.io-client": "^4.8.1"
-  },
-  "type": "commonjs"
+  }
 }
