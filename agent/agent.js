@@ -31,7 +31,9 @@ keyboard.config.autoDelayMs = 0;
 const socket = io("https://screensharing-test-backend.onrender.com", {
   transports: ["websocket"],
   reconnection: true,
-  reconnectionAttempts: Infinity
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 2000, // 2s delay before retry
+  reconnectionDelayMax: 10000 // max 10s delay
 });
 
 let captureInfo = null, lastMoveTs = 0;
@@ -50,9 +52,9 @@ socket.on("capture-info", info => {
   captureInfo = info;
   console.log("📐 Capture info:", info);
 });
-socket.on("stop-share", () => {
+socket.on("stop-share", ({ name }) => {
   captureInfo = null;
-  console.log("🛑 Stop-share received");
+  console.log(`🛑 Stop-share received from ${name}`);
 });
 
 // ---- Key mapping ----
@@ -88,7 +90,13 @@ socket.on("control", async data => {
       const displayHeight = await screen.height();
       const absX = srcX !== null ? clamp(Math.round(srcX * (displayWidth / Math.max(1, w))), 0, displayWidth - 1) : null;
       const absY = srcY !== null ? clamp(Math.round(srcY * (displayHeight / Math.max(1, h))), 0, displayHeight - 1) : null;
-      if (absX !== null && absY !== null) await mouse.setPosition(new Point(absX, absY));
+   try {
+    if (absX !== null && absY !== null) {
+      await mouse.setPosition(new Point(absX, absY));
+    }
+  } catch (e) {
+    console.warn("⚠️ Mouse move failed:", e.message);
+  }
 
       if (data.type === "click") await mouse.click(mapBtn(data.button));
       else if (data.type === "dblclick") await mouse.doubleClick(mapBtn(data.button));
@@ -119,3 +127,10 @@ function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 // ---- Keep agent alive ----
 process.stdin.resume();  // keeps Node process running
 console.log("🟢 Agent is now alive and waiting for remote control events...");
+
+// ---- Graceful exit ----
+process.on("SIGINT", async () => {
+  console.log("👋 Agent shutting down...");
+  await keyboard.releaseKey(...Object.values(keyMap)); // release any stuck keys
+  process.exit();
+});

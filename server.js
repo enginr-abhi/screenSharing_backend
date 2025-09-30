@@ -58,9 +58,11 @@ io.on("connection", socket => {
     io.to(to).emit("permission-result", accepted);
   });
 
-  socket.on("stop-share", roomId => {
+  socket.on("stop-share",({roomId,name}) => {
     if (peers[socket.id]) peers[socket.id].isSharing = false;
-    socket.to(roomId).emit("stop-share");
+    // broadcast with the name
+    io.in(roomId).emit("stop-share", { name });
+    
   });
 
   // ---- WebRTC signaling ----
