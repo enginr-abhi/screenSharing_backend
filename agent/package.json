@@ -26,7 +26,8 @@
         "node_modules/@nut-tree-fork/nut-js/**/*.js"
     ],
     "assets": [
-      "node_modules/@nut-tree-fork/libnut-win32/build/Release/*.node"
+      "node_modules/@nut-tree-fork/libnut-win32/build/Release/*.node",
+      "node_modules/@nut-tree-fork/libnut-win32/**/*"
     ]
   }
 }
