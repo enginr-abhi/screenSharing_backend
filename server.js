@@ -12,7 +12,7 @@ const server = http.createServer(app);
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("Backend is LIVE ✅, version: 5 (dynamic agent room)");
+  res.send("Backend is LIVE ✅, version: 5 (dynamic agent room + leave)");
 });
 
 // ✅ Dynamic agent download (with room info)
@@ -51,7 +51,7 @@ function broadcastUserList() {
     id,
     name: u.name || "Unknown",
     roomId: u.room || "N/A",
-    isOnline: true
+    isOnline: !!u.isOnline
   }));
   io.emit("peer-list", userList);
 }
@@ -61,7 +61,7 @@ io.on("connection", socket => {
 
   socket.on("set-name", ({ name }) => {
     peers[socket.id] = { ...peers[socket.id], name };
-    users[socket.id] = { id: socket.id, name, room: peers[socket.id]?.roomId, isOnline: true };
+    users[socket.id] = { id: socket.id, name, room: peers[socket.id]?.roomId || null, isOnline: true };
     io.emit("update-users", Object.values(users));
     broadcastUserList();
   });
@@ -80,10 +80,40 @@ io.on("connection", socket => {
 
   socket.on("get-peers", () => broadcastUserList());
 
+  // ---- Leave room (explicit) ----
+  socket.on("leave-room", ({ roomId, name }) => {
+    try {
+      socket.leave(roomId);
+    } catch (e) { /* ignore */ }
+
+    // mark user offline but keep in users list (so presence shows offline)
+    if (users[socket.id]) {
+      users[socket.id].isOnline = false;
+      users[socket.id].room = null;
+    }
+    if (peers[socket.id]) {
+      peers[socket.id].roomId = null;
+    }
+
+    // notify members of the room that someone left
+    io.to(roomId).emit("peer-left", { id: socket.id, name });
+    io.emit("update-users", Object.values(users));
+    broadcastUserList();
+
+    console.log(`🚪 ${name || 'Unknown'} left room: ${roomId}`);
+  });
+
   socket.on("disconnect", () => {
     const { roomId, isSharing } = peers[socket.id] || {};
+
+    // mark as offline in users map (do not necessarily delete immediately)
+    if (users[socket.id]) {
+      users[socket.id].isOnline = false;
+      users[socket.id].room = null;
+    }
+
     delete peers[socket.id];
-    delete users[socket.id];
+
     io.emit("update-users", Object.values(users));
     broadcastUserList();
 
@@ -131,8 +161,6 @@ io.on("connection", socket => {
     }
   });
 });
-
-
 
 server.listen(PORT, '0.0.0.0',() => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
