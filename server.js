@@ -12,7 +12,7 @@ const server = http.createServer(app);
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("Backend is LIVE ✅, version: 5 (dynamic agent room + leave)");
+  res.send("Backend is LIVE ✅, version: 5 (dynamic agent room)");
 });
 
 // ✅ Dynamic agent download (with room info)
@@ -59,6 +59,7 @@ function broadcastUserList() {
 io.on("connection", socket => {
   console.log("Connected:", socket.id);
 
+  // set-name: store name, mark online
   socket.on("set-name", ({ name }) => {
     peers[socket.id] = { ...peers[socket.id], name };
     users[socket.id] = { id: socket.id, name, room: peers[socket.id]?.roomId || null, isOnline: true };
@@ -66,53 +67,56 @@ io.on("connection", socket => {
     broadcastUserList();
   });
 
+  // join-room: put socket in room, mark user online and in room
   socket.on("join-room", ({ roomId, name, isAgent = false }) => {
     peers[socket.id] = { ...peers[socket.id], name, roomId, isAgent, isSharing: false };
     socket.join(roomId);
-    users[socket.id] = { id: socket.id, name, room: roomId, isOnline: true };
+    users[socket.id] = { id: socket.id, name: name || peers[socket.id]?.name || "Unknown", room: roomId, isOnline: true };
 
-    socket.to(roomId).emit("peer-joined", { id: socket.id, name, isAgent });
+    socket.to(roomId).emit("peer-joined", { id: socket.id, name: peers[socket.id].name, isAgent });
     io.emit("update-users", Object.values(users));
     broadcastUserList();
 
     console.log(`👤 ${name || 'Unknown'} joined room: ${roomId} (Agent: ${isAgent})`);
   });
 
+  // Client requests the latest peers
   socket.on("get-peers", () => broadcastUserList());
 
-  // ---- Leave room (explicit) ----
+  // leave-room: user voluntarily leaves the room (stays connected)
   socket.on("leave-room", ({ roomId, name }) => {
-    try {
-      socket.leave(roomId);
-    } catch (e) { /* ignore */ }
+    const actualRoom = roomId || (peers[socket.id] && peers[socket.id].roomId);
+    if (actualRoom) {
+      // make socket leave the room
+      try { socket.leave(actualRoom); } catch (e) { /* ignore */ }
 
-    // mark user offline but keep in users list (so presence shows offline)
-    if (users[socket.id]) {
-      users[socket.id].isOnline = false;
-      users[socket.id].room = null;
+      // update server state
+      if (peers[socket.id]) {
+        peers[socket.id].roomId = null;
+      }
+      if (users[socket.id]) {
+        users[socket.id].room = null;
+        // mark offline for presence dot (you wanted offline presence after leaving)
+        users[socket.id].isOnline = false;
+      }
+
+      // notify the room that the peer left
+      socket.to(actualRoom).emit("peer-left", { id: socket.id, name: name || peers[socket.id]?.name });
+
+      // broadcast updated user list to everyone
+      io.emit("update-users", Object.values(users));
+      broadcastUserList();
+
+      console.log(`🚪 ${name || peers[socket.id]?.name || socket.id} left room: ${actualRoom}`);
     }
-    if (peers[socket.id]) {
-      peers[socket.id].roomId = null;
-    }
-
-    // notify members of the room that someone left
-    io.to(roomId).emit("peer-left", { id: socket.id, name });
-    io.emit("update-users", Object.values(users));
-    broadcastUserList();
-
-    console.log(`🚪 ${name || 'Unknown'} left room: ${roomId}`);
   });
 
+  // disconnect: remove peer and mark offline / clean up
   socket.on("disconnect", () => {
     const { roomId, isSharing } = peers[socket.id] || {};
-
-    // mark as offline in users map (do not necessarily delete immediately)
-    if (users[socket.id]) {
-      users[socket.id].isOnline = false;
-      users[socket.id].room = null;
-    }
-
+    // Remove server-side records for the socket
     delete peers[socket.id];
+    delete users[socket.id];
 
     io.emit("update-users", Object.values(users));
     broadcastUserList();
