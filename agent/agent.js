@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 const os = require("os");
 const process = require("process");
+const fs = require("fs");
+const path = require("path");
 const { io } = require("socket.io-client");
 const { mouse, keyboard, Key, Point, Button, screen } = require("@nut-tree-fork/nut-js");
 const { execSync } = require("child_process");
@@ -27,23 +29,37 @@ checkPermissions();
 mouse.config.mouseSpeed = 1200;
 keyboard.config.autoDelayMs = 0;
 
+// ---- Read dynamic room from config.json or args ----
+let ROOM = "room1";
+try {
+  const configPath = path.join(__dirname, "config.json");
+  if (fs.existsSync(configPath)) {
+    const { roomId } = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    ROOM = roomId || ROOM;
+  } else if (process.argv[2]) {
+    ROOM = process.argv[2];
+  } else if (process.env.ROOM) {
+    ROOM = process.env.ROOM;
+  }
+} catch (err) {
+  console.error("⚠️ Failed to read config.json:", err);
+}
+
 // ---- Socket ----
 const socket = io("https://screensharing-test-backend.onrender.com", {
   transports: ["websocket"],
   reconnection: true,
   reconnectionAttempts: Infinity,
-  reconnectionDelay: 2000, // 2s delay before retry
-  reconnectionDelayMax: 10000 // max 10s delay
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 10000
 });
 
 let captureInfo = null, lastMoveTs = 0;
 const MOVE_THROTTLE_MS = 15;
-const ROOM = process.env.ROOM || process.argv[2] || "room1";
+
 // ---- On connect, join as Agent ----
 socket.on("connect", () => {
-  console.log("✅ Agent connected:", socket.id,"Room:", ROOM);
- 
-  // 👇 IMPORTANT FIX: join room as agent
+  console.log("✅ Agent connected:", socket.id, "Room:", ROOM);
   socket.emit("join-room", { roomId: ROOM, isAgent: true });
 });
 
@@ -90,13 +106,8 @@ socket.on("control", async data => {
       const displayHeight = await screen.height();
       const absX = srcX !== null ? clamp(Math.round(srcX * (displayWidth / Math.max(1, w))), 0, displayWidth - 1) : null;
       const absY = srcY !== null ? clamp(Math.round(srcY * (displayHeight / Math.max(1, h))), 0, displayHeight - 1) : null;
-   try {
-    if (absX !== null && absY !== null) {
-      await mouse.setPosition(new Point(absX, absY));
-    }
-  } catch (e) {
-    console.warn("⚠️ Mouse move failed:", e.message);
-  }
+
+      if (absX !== null && absY !== null) await mouse.setPosition(new Point(absX, absY));
 
       if (data.type === "click") await mouse.click(mapBtn(data.button));
       else if (data.type === "dblclick") await mouse.doubleClick(mapBtn(data.button));
@@ -107,6 +118,7 @@ socket.on("control", async data => {
         else await mouse.scrollUp(200);
       }
     }
+
     if (["keydown", "keyup"].includes(data.type)) {
       const rawKey = (data.key || "").toString();
       const keyName = rawKey.toLowerCase();
@@ -125,12 +137,12 @@ socket.on("control", async data => {
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 // ---- Keep agent alive ----
-process.stdin.resume();  // keeps Node process running
+process.stdin.resume();
 console.log("🟢 Agent is now alive and waiting for remote control events...");
 
 // ---- Graceful exit ----
 process.on("SIGINT", async () => {
   console.log("👋 Agent shutting down...");
-  await keyboard.releaseKey(...Object.values(keyMap)); // release any stuck keys
+  await keyboard.releaseKey(...Object.values(keyMap));
   process.exit();
 });

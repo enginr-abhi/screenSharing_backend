@@ -1,21 +1,36 @@
-//server.js //
 const http = require('http');
 const express = require("express");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const PORT = process.env.PORT || 9000;
 const path = require('path');
+const fs = require('fs');
+const PORT = process.env.PORT || 9000;
+
 const app = express();
 const server = http.createServer(app);
+
 app.use(cors());
+
 app.get("/", (req, res) => {
-  res.send("Backend is LIVE ✅, version: 2");
+  res.send("Backend is LIVE ✅, version: 5 (dynamic agent room)");
 });
 
-
+// ✅ Dynamic agent download (with room info)
 app.get("/download-agent", (req, res) => {
-  const filePath = path.join(__dirname, "agent", "agent.exe");
-  res.download(filePath, "remote-agent.exe", (err) => {
+  const roomId = req.query.room || "room1";
+  const agentDir = path.join(__dirname, "agent");
+
+  // Write config.json dynamically for the agent
+  try {
+    const configPath = path.join(agentDir, "config.json");
+    fs.writeFileSync(configPath, JSON.stringify({ roomId }, null, 2));
+    console.log(`📝 Created config.json for room: ${roomId}`);
+  } catch (err) {
+    console.error("⚠️ Failed to write config.json:", err);
+  }
+
+  const filePath = path.join(agentDir, "agent.exe");
+  res.download(filePath, "remote-agent.exe", err => {
     if (err) {
       console.error("Download error:", err);
       res.status(500).send("File not found");
@@ -23,29 +38,60 @@ app.get("/download-agent", (req, res) => {
   });
 });
 
-
-const io = new Server(server, { cors: { origin: "https://screen-sharing-frontend.vercel.app/" , methods: ["GET","POST"] } });
+const io = new Server(server, {
+  cors: { origin: "https://screen-sharing-frontend.vercel.app", methods: ["GET", "POST"] }
+});
 
 const peers = {}; // socketId -> { name, roomId, isAgent, isSharing, captureInfo? }
+const users = {}; // socketId -> { id, name, room, isOnline }
+
+// Helper: broadcast full user list to everyone
+function broadcastUserList() {
+  const userList = Object.entries(users).map(([id, u]) => ({
+    id,
+    name: u.name || "Unknown",
+    roomId: u.room || "N/A",
+    isOnline: true
+  }));
+  io.emit("peer-list", userList);
+}
 
 io.on("connection", socket => {
   console.log("Connected:", socket.id);
 
-  socket.on("set-name", ({ name }) => { peers[socket.id] = { ...peers[socket.id], name }; });
-
-  socket.on("join-room", ({ roomId, isAgent = false }) => {
-    peers[socket.id] = { ...peers[socket.id], roomId, isAgent, isSharing: false };
-    socket.join(roomId);
-    socket.to(roomId).emit("peer-joined", { id: socket.id, name: peers[socket.id].name, isAgent });
+  socket.on("set-name", ({ name }) => {
+    peers[socket.id] = { ...peers[socket.id], name };
+    users[socket.id] = { id: socket.id, name, room: peers[socket.id]?.roomId, isOnline: true };
+    io.emit("update-users", Object.values(users));
+    broadcastUserList();
   });
+
+  socket.on("join-room", ({ roomId, name, isAgent = false }) => {
+    peers[socket.id] = { ...peers[socket.id], name, roomId, isAgent, isSharing: false };
+    socket.join(roomId);
+    users[socket.id] = { id: socket.id, name, room: roomId, isOnline: true };
+
+    socket.to(roomId).emit("peer-joined", { id: socket.id, name, isAgent });
+    io.emit("update-users", Object.values(users));
+    broadcastUserList();
+
+    console.log(`👤 ${name || 'Unknown'} joined room: ${roomId} (Agent: ${isAgent})`);
+  });
+
+  socket.on("get-peers", () => broadcastUserList());
 
   socket.on("disconnect", () => {
     const { roomId, isSharing } = peers[socket.id] || {};
+    delete peers[socket.id];
+    delete users[socket.id];
+    io.emit("update-users", Object.values(users));
+    broadcastUserList();
+
     if (roomId) {
       socket.to(roomId).emit("peer-left", { id: socket.id });
       if (isSharing) socket.to(roomId).emit("stop-share");
     }
-    delete peers[socket.id];
+    console.log(`❌ Disconnected: ${socket.id}`);
   });
 
   // ---- Screen request & permission ----
@@ -58,11 +104,9 @@ io.on("connection", socket => {
     io.to(to).emit("permission-result", accepted);
   });
 
-  socket.on("stop-share",({roomId,name}) => {
+  socket.on("stop-share", ({ roomId, name }) => {
     if (peers[socket.id]) peers[socket.id].isSharing = false;
-    // broadcast with the name
     io.in(roomId).emit("stop-share", { name });
-    
   });
 
   // ---- WebRTC signaling ----
@@ -87,6 +131,7 @@ io.on("connection", socket => {
     }
   });
 });
+
 
 
 server.listen(PORT, '0.0.0.0',() => {
