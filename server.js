@@ -39,7 +39,7 @@ app.get("/download-agent", (req, res) => {
 });
 
 const io = new Server(server, {
-  cors: { origin: "https://screen-sharing-frontend.vercel.app", methods: ["GET", "POST"] }
+  cors: { origin: "https://screen-sharing-frontend.vercel.app", methods: ["GET", "POST"],transports: ["websocket", "polling"] }
 });
 
 const peers = {}; // socketId -> { name, roomId, isAgent, isSharing, captureInfo? }
@@ -169,3 +169,4 @@ io.on("connection", socket => {
 server.listen(PORT, '0.0.0.0',() => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
+
