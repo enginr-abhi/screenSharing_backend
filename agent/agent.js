@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { io } = require("socket.io-client");
 const { mouse, keyboard, Key, Point, Button, screen } = require("@nut-tree-fork/nut-js");
-const { execSync } = require("child_process");
+const { execSync, spawn } = require("child_process");
 
 // ---- Permission check ----
 function checkPermissions() {
@@ -57,17 +57,114 @@ const socket = io("https://screensharing-test-backend.onrender.com", {
 let captureInfo = null, lastMoveTs = 0;
 const MOVE_THROTTLE_MS = 15;
 
+// ---- Windows RDP Functions ----
+function enableWindowsRDP() {
+    try {
+        console.log("🔄 Enabling Windows RDP...");
+        
+        // 1. RDP enable registry me
+        execSync('reg add "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f', { stdio: "ignore" });
+        
+        // 2. Firewall me RDP allow kare
+        execSync('netsh advfirewall firewall set rule group="remote desktop" new enable=Yes', { stdio: "ignore" });
+        
+        // 3. NLA disable kare (easier connection)
+        execSync('reg add "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f', { stdio: "ignore" });
+        
+        console.log("✅ Windows RDP Enabled Successfully");
+        
+        // IP address get kare
+        const networkInterfaces = os.networkInterfaces();
+        let localIP = 'localhost';
+        
+        for (const interfaceName in networkInterfaces) {
+            for (const interface of networkInterfaces[interfaceName]) {
+                if (interface.family === 'IPv4' && !interface.internal) {
+                    localIP = interface.address;
+                    break;
+                }
+            }
+        }
+        
+        // User1 ko RDP connection details bhejo
+        const username = os.userInfo().username;
+        const computerName = os.hostname();
+        
+        socket.emit('windows-rdp-ready', {
+            ip: localIP,
+            username: username,
+            computerName: computerName,
+            platform: 'windows',
+            roomId: ROOM
+        });
+        
+        console.log(`📡 RDP Ready - IP: ${localIP}, Username: ${username}, Computer: ${computerName}`);
+        
+        return true;
+    } catch (error) {
+        console.error('❌ RDP Enable Failed:', error);
+        return false;
+    }
+}
+
+function getSystemInfo() {
+    const networkInterfaces = os.networkInterfaces();
+    let localIP = 'localhost';
+    
+    for (const interfaceName in networkInterfaces) {
+        for (const interface of networkInterfaces[interfaceName]) {
+            if (interface.family === 'IPv4' && !interface.internal) {
+                localIP = interface.address;
+                break;
+            }
+        }
+    }
+    
+    return {
+        ip: localIP,
+        username: os.userInfo().username,
+        computerName: os.hostname(),
+        platform: os.platform(),
+        roomId: ROOM
+    };
+}
+
 // ---- On connect, join as Agent ----
 socket.on("connect", () => {
   console.log("✅ Agent connected:", socket.id, "Room:", ROOM);
   socket.emit("join-room", { roomId: ROOM, isAgent: true });
+  
+  // Automatically system info send karo
+  const systemInfo = getSystemInfo();
+  socket.emit('system-info', systemInfo);
+  console.log("📊 System info sent to server");
 });
 
+// ---- RDP Start Command ----
+socket.on('start-rdp-capture', () => {
+    console.log("🚀 Received RDP start command");
+    if (os.platform() === 'win32') {
+        const success = enableWindowsRDP();
+        if (!success) {
+            // Fallback: system info bhejo
+            const systemInfo = getSystemInfo();
+            socket.emit('windows-rdp-ready', systemInfo);
+        }
+    } else {
+        // Non-Windows systems ke liye system info bhejo
+        const systemInfo = getSystemInfo();
+        socket.emit('windows-rdp-ready', systemInfo);
+    }
+});
+
+// ---- Existing Events ----
 socket.on("disconnect", () => console.log("❌ Agent disconnected"));
+
 socket.on("capture-info", info => {
   captureInfo = info;
   console.log("📐 Capture info:", info);
 });
+
 socket.on("stop-share", ({ name }) => {
   captureInfo = null;
   console.log(`🛑 Stop-share received from ${name}`);
@@ -86,6 +183,7 @@ const keyMap = {
   f6: Key.F6, f7: Key.F7, f8: Key.F8, f9: Key.F9, f10: Key.F10,
   f11: Key.F11, f12: Key.F12
 };
+
 function isPrintableChar(s) { return typeof s === "string" && s.length === 1; }
 const mapBtn = btn => btn === 2 ? Button.RIGHT : (btn === 1 ? Button.MIDDLE : Button.LEFT);
 
@@ -134,15 +232,23 @@ socket.on("control", async data => {
     console.error("⚠️ Error handling control:", err);
   }
 });
+
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 // ---- Keep agent alive ----
 process.stdin.resume();
 console.log("🟢 Agent is now alive and waiting for remote control events...");
+console.log("🔧 RDP Support: Enabled - Will auto-enable Windows Remote Desktop when requested");
 
 // ---- Graceful exit ----
 process.on("SIGINT", async () => {
   console.log("👋 Agent shutting down...");
   await keyboard.releaseKey(...Object.values(keyMap));
   process.exit();
+});
+
+// ---- Auto-reconnect and status ----
+socket.on("reconnect", () => {
+  console.log("🔁 Reconnected to server");
+  socket.emit("join-room", { roomId: ROOM, isAgent: true });
 });
