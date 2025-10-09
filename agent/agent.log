@@ -1,0 +1,11 @@
+[2025-10-09T11:20:56.571Z] ⚠️ Not running as Admin! Mouse/keyboard may fail
+[2025-10-09T11:20:56.630Z] 🔄 Enabling Windows RDP...
+[2025-10-09T11:20:56.879Z] ❌ RDP enable failed: Command failed: reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+[2025-10-09T11:20:56.880Z] 🟢 Agent started — waiting for remote control events.
+[2025-10-09T11:20:58.186Z] ✅ Connected to server (s3Fr38Pve9DtKazfAAAD) — room=room1
+[2025-10-09T11:21:05.959Z] 👋 Agent shutting down...
+[2025-10-09T11:31:55.604Z] ⚠️ Not running as Admin! Mouse/keyboard may fail
+[2025-10-09T11:31:55.662Z] 🔄 Enabling Windows RDP...
+[2025-10-09T11:31:55.928Z] ❌ RDP enable failed: Command failed: reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+[2025-10-09T11:31:55.929Z] 🟢 Agent started — waiting for remote control events.
+[2025-10-09T11:31:57.266Z] ✅ Connected to server (_ORcCtY1WFfXbKR7AAAF) — room=room1
