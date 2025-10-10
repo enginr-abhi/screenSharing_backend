@@ -26,11 +26,11 @@
   },
   "pkg": {
     "assets": [
+      "config.json",
       "node_modules/@nut-tree-fork/libnut-win32/build/Release/*.node",
       "node_modules/sharp/build/Release/*.node",
       "node_modules/sharp/vendor/lib/*"
-
     ],
-    "scripts":[]
+    "scripts": []
   }
 }
