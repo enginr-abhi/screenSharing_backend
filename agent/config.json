@@ -1,5 +1,5 @@
 {
-  "server": "http://localhost:9000",
+  "server": "https://screensharing-test-backend.onrender.com",
   "room": "room1",
   "autoReconnect": true
 }
